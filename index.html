@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KHO QUÂN KHÍ: DELTA FORCE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        df: {
+                            dark: '#0a0a0a',
+                            panel: '#121212',
+                            accent: '#eab308', /* Amber-500 for industrial look */
+                            dim: '#404040',
+                            text: '#d4d4d4',
+                            border: '#262626'
+                        }
+                    },
+                    fontFamily: {
+                        'hud': ['"Chakra Petch"', 'sans-serif'],
+                        'mono': ['"JetBrains Mono"', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #050505;
+            /* Grid pattern for warehouse feel */
+            background-image: 
+                linear-gradient(rgba(234, 179, 8, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(234, 179, 8, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            color: #d4d4d4;
+        }
+
+        /* Tactical Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 0; }
+        ::-webkit-scrollbar-thumb:hover { background: #eab308; }
+
+        /* Industrial Corners */
+        .warehouse-panel {
+            background: #121212;
+            border: 1px solid #333;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+        
+        .warehouse-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 10px; height: 10px;
+            border-top: 2px solid #eab308;
+            border-left: 2px solid #eab308;
+        }
+        
+        .warehouse-panel::after {
+            content: '';
+            position: absolute;
+            bottom: 0; right: 0;
+            width: 10px; height: 10px;
+            border-bottom: 2px solid #eab308;
+            border-right: 2px solid #eab308;
+        }
+
+        /* Animations */
+        .item-row:hover {
+            background-color: rgba(234, 179, 8, 0.05);
+            border-left-color: #eab308;
+        }
+        
+        .modal-active { overflow: hidden; }
+        
+        .tag-clip {
+            clip-path: polygon(0 0, 100% 0, 90% 100%, 0% 100%);
+        }
+
+        /* Input file hidden */
+        #importFile { display: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-hud">
+
+    <!-- Hidden Input for Import -->
+    <input type="file" id="importFile" accept=".json" onchange="handleImport(event)">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 bg-[#0a0a0a]/95 border-b border-df-border backdrop-blur-md">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3 select-none">
+                    <div class="w-10 h-10 bg-df-accent flex items-center justify-center text-black font-bold text-xl rounded-sm">
+                        <i class="fa-solid fa-box-archive"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold tracking-widest text-white uppercase leading-none">KHO QUÂN KHÍ</h1>
+                        <span class="text-xs text-df-accent tracking-[0.2em] font-mono">LOGISTICS DATABASE</span>
+                    </div>
+                </div>
+                
+                <div class="flex gap-3 w-full md:w-auto">
+                    <!-- Search -->
+                    <div class="relative flex-grow md:w-96 group">
+                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <i class="fa-solid fa-magnifying-glass text-df-dim group-focus-within:text-df-accent transition-colors"></i>
+                        </div>
+                        <input type="text" id="searchInput" placeholder="TRA CỨU MÃ, TÊN SÚNG..." 
+                            class="w-full bg-[#1a1a1a] border border-df-border text-white placeholder-gray-600 py-2 pl-10 pr-4 focus:outline-none focus:border-df-accent transition-all font-mono text-sm rounded-sm">
+                    </div>
+                    
+                    <!-- Add Button -->
+                    <button onclick="openModal()" class="bg-df-accent hover:bg-yellow-400 text-black px-5 py-2 transition-all flex items-center gap-2 font-bold uppercase text-sm rounded-sm shadow-lg shadow-yellow-900/20">
+                        <i class="fa-solid fa-plus-square"></i> <span class="hidden sm:inline">NHẬP KHO</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 py-6 relative">
+        
+        <!-- Controls Area -->
+        <div class="mb-8 p-1">
+            <!-- Filter Buttons -->
+            <div class="flex flex-wrap gap-2 items-center justify-center md:justify-start" id="filterContainer">
+                <div class="text-xs font-mono text-gray-500 mr-2 uppercase tracking-widest hidden md:block">DANH MỤC_</div>
+                <!-- Buttons injected by JS -->
+            </div>
+
+            <!-- Data Management Toolbar -->
+            <div class="flex flex-wrap justify-end items-center gap-4 mt-4 pt-3 border-t border-[#262626]">
+                <div class="text-xs font-mono text-gray-600 uppercase tracking-widest mr-auto md:mr-0 hidden md:block">QUẢN TRỊ DỮ LIỆU_</div>
+                
+                <button onclick="exportData()" class="flex items-center gap-2 text-[10px] font-mono text-df-accent hover:text-white border border-gray-800 hover:border-df-accent px-3 py-1.5 rounded-sm transition-colors uppercase bg-[#121212]">
+                    <i class="fa-solid fa-download"></i> XUẤT FILE JSON
+                </button>
+                
+                <button onclick="triggerImport()" class="flex items-center gap-2 text-[10px] font-mono text-df-accent hover:text-white border border-gray-800 hover:border-df-accent px-3 py-1.5 rounded-sm transition-colors uppercase bg-[#121212]">
+                    <i class="fa-solid fa-upload"></i> NHẬP FILE JSON
+                </button>
+
+                <div class="h-4 w-px bg-gray-800 mx-2"></div>
+
+                <button onclick="resetData()" class="flex items-center gap-2 text-[10px] font-mono text-red-800 hover:text-red-500 hover:bg-red-900/10 px-3 py-1.5 rounded-sm transition-colors uppercase">
+                    <i class="fa-solid fa-rotate-left"></i> KHÔI PHỤC GỐC
+                </button>
+            </div>
+        </div>
+
+        <!-- Grid -->
+        <div id="gridContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Content injected via JS -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="noResults" class="hidden text-center py-24 opacity-50">
+            <div class="inline-block p-6 border-2 border-dashed border-gray-800 rounded-lg mb-4">
+                <i class="fa-solid fa-box-open text-4xl text-gray-600"></i>
+            </div>
+            <p class="text-xl font-hud text-gray-500 tracking-widest uppercase">KHÔNG TÌM THẤY DỮ LIỆU</p>
+        </div>
+    </main>
+
+    <!-- Modal Form (Add/Edit Gun) -->
+    <div id="modal" class="modal opacity-0 pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+        <div class="modal-overlay absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
+        
+        <div class="relative warehouse-panel w-full max-w-lg mx-4 transform transition-all duration-300 scale-95" id="modalContent">
+            <!-- Header Bar -->
+            <div class="bg-[#1a1a1a] p-4 border-b border-[#333] flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white uppercase tracking-wider" id="modalTitle">NHẬP DỮ LIỆU</h2>
+                <div class="text-xs font-mono text-df-accent">SECURE_LOG #882</div>
+            </div>
+
+            <div class="p-6">
+                <div class="space-y-4">
+                    <input type="hidden" id="editIndex" value="">
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="col-span-2">
+                            <label class="block text-xs font-mono text-gray-500 mb-1 uppercase">MÃ ĐỊNH DANH (TÊN SÚNG)</label>
+                            <input type="text" id="inputName" class="w-full bg-black border border-gray-700 p-3 text-white focus:border-df-accent focus:outline-none font-bold uppercase" placeholder="VD: M4A1">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs font-mono text-gray-500 mb-1 uppercase">LOẠI ĐẠN (CALIBER)</label>
+                            <input type="text" id="inputAmmo" list="ammoList" class="w-full bg-black border border-gray-700 p-3 text-white focus:border-df-accent focus:outline-none" placeholder="VD: 5.56x45">
+                            <datalist id="ammoList"></datalist>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-mono text-gray-500 mb-1 uppercase">PHÂN LOẠI</label>
+                            <select id="inputType" class="w-full bg-black border border-gray-700 p-3 text-white focus:border-df-accent focus:outline-none font-mono text-sm">
+                                <option value="RIFE">ASSAULT RIFLE</option>
+                                <option value="SMG">SMG</option>
+                                <option value="LMG">LMG</option>
+                                <option value="SR">SNIPER RIFLE</option>
+                                <option value="MR">DMR (MARKSMAN)</option>
+                                <option value="PISTOL">PISTOL</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-[#333]">
+                    <button onclick="closeModal()" class="px-6 py-2 bg-transparent border border-gray-600 text-gray-400 hover:text-white hover:border-white text-sm font-bold transition-all uppercase">HỦY BỎ</button>
+                    <button onclick="saveWeapon()" class="px-6 py-2 bg-df-accent text-black hover:bg-yellow-400 text-sm font-bold transition-all uppercase shadow-lg">LƯU KHO</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Build Manager Modal -->
+    <div id="buildModal" class="modal opacity-0 pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+        <div class="modal-overlay absolute inset-0 bg-black/90 backdrop-blur-md"></div>
+        
+        <div class="relative warehouse-panel w-full max-w-3xl mx-4 flex flex-col max-h-[85vh]">
+            <!-- Header -->
+            <div class="flex justify-between items-center p-5 border-b border-[#333] bg-[#1a1a1a]">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-wrench text-df-accent text-xl"></i>
+                    <div>
+                        <h3 class="text-xl font-bold text-white uppercase tracking-wider">XƯỞNG KỸ THUẬT</h3>
+                        <p class="text-xs text-gray-400 font-mono" id="buildGunName">CẤU HÌNH M4A1</p>
+                    </div>
+                </div>
+                <button onclick="closeBuildModal()" class="text-gray-500 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-grow overflow-y-auto p-5 space-y-6">
+                <!-- Add Form -->
+                <div class="bg-black/50 border border-dashed border-gray-700 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-xs font-bold text-df-accent uppercase tracking-widest"><i class="fa-solid fa-file-circle-plus mr-1"></i> NHẬP BẢN VẼ MỚI</h4>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        <div class="md:col-span-3">
+                            <input type="text" id="buildName" placeholder="Tên cấu hình (VD: Meta)" class="w-full bg-[#121212] border border-gray-700 px-3 py-2 text-sm text-white focus:border-df-accent focus:outline-none">
+                        </div>
+                        <div class="md:col-span-3">
+                            <input type="number" id="buildPrice" placeholder="Giá ước tính" class="w-full bg-[#121212] border border-gray-700 px-3 py-2 text-sm text-white focus:border-df-accent focus:outline-none font-mono">
+                        </div>
+                        <div class="md:col-span-4">
+                            <input type="text" id="buildCode" placeholder="Dán mã Code tại đây" class="w-full bg-[#121212] border border-gray-700 px-3 py-2 text-sm font-mono text-df-accent focus:border-df-accent focus:outline-none">
+                        </div>
+                        <div class="md:col-span-2">
+                            <button onclick="addBuild()" class="w-full h-full bg-df-accent text-black font-bold text-xs uppercase hover:bg-white transition-colors">
+                                LƯU LẠI
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- List -->
+                <div>
+                    <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">DANH SÁCH CẤU HÌNH ĐÃ LƯU</h4>
+                    <div id="buildListContainer" class="space-y-3"></div>
+                    <p id="noBuildsMsg" class="text-center text-gray-600 font-mono text-sm py-4 italic">[ CHƯA CÓ DỮ LIỆU ]</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-[#262626] bg-[#0a0a0a] py-4 text-center">
+        <p class="text-gray-600 text-xs font-mono">HỆ THỐNG QUẢN LÝ KHO QUÂN SỰ // PHIÊN BẢN VIỆT HÓA // V4.2</p>
+    </footer>
+
+    <script>
+        // --- DATA & CONFIG ---
+        // Enhanced default data
+        function getPlaceholderImage(text) {
+            // Using a darker, more utilitarian placeholder style
+            return `https://placehold.co/100x100/121212/eab308?text=${encodeURIComponent(text)}&font=roboto`;
+        }
+
+        const defaultData = [
+            { ammo: "7.62x39", image: getPlaceholderImage("7.62x39"), guns: [{ name: "MK47", type: "RIFE" }, { name: "PTR-32", type: "RIFE" }, { name: "AKM", type: "RIFE" }, { name: "SKS", type: "MR" }] },
+            { ammo: "5.45x39", image: getPlaceholderImage("5.45x39"), guns: [{ name: "KC-17", type: "RIFE" }, { name: "AK-12", type: "RIFE" }, { name: "AKS", type: "RIFE" }] },
+            { ammo: ".300", image: getPlaceholderImage(".300"), guns: [{ name: "K437", type: "RIFE" }] },
+            { ammo: "5.8x42", image: getPlaceholderImage("5.8x42"), guns: [{ name: "CI-19", type: "RIFE" }, { name: "QBZ", type: "RIFE" }, { name: "QJB", type: "LMG" }] },
+            { ammo: "9x39", image: getPlaceholderImage("9x39"), guns: [{ name: "AS VAL", type: "RIFE" }, { name: "SR-3M", type: "SMG" }, { name: "VSS", type: "MR" }] },
+            { ammo: "5.56x45", image: getPlaceholderImage("5.56x45"), guns: [{ name: "CAR-15", type: "RIFE" }, { name: "SG552", type: "RIFE" }, { name: "AUG", type: "RIFE" }, { name: "M16", type: "RIFE" }, { name: "K416", type: "RIFE" }, { name: "M4A1", type: "RIFE" }, { name: "M249", type: "LMG" }, { name: "Mini-14", type: "MR" }] },
+            { ammo: "7.62x51", image: getPlaceholderImage("7.62x51"), guns: [{ name: "G3", type: "RIFE" }, { name: "SCAR-H", type: "RIFE" }, { name: "M700", type: "SR" }, { name: "R93", type: "SR" }, { name: "PSG", type: "MR" }, { name: "SR9", type: "MR" }, { name: "SR-25", type: "MR" }, { name: "M14", type: "MR" }] },
+            { ammo: "6.8x51", image: getPlaceholderImage("6.8x51"), guns: [{ name: "M7", type: "RIFE" }, { name: "M250", type: "LMG" }] },
+            { ammo: "12.7x55", image: getPlaceholderImage("12.7x55"), guns: [{ name: "ASH", type: "RIFE" }] },
+            { ammo: "4.6x30", image: getPlaceholderImage("4.6x30"), guns: [{ name: "MK4", type: "SMG" }, { name: "MP7", type: "SMG" }] },
+            { ammo: "9x19", image: getPlaceholderImage("9x19"), guns: [{ name: "QCQ", type: "SMG" }, { name: "Vityaz", type: "SMG" }, { name: "Bizon", type: "SMG" }, { name: "UZI", type: "SMG" }, { name: "MP5", type: "SMG" }, { name: "G17", type: "PISTOL" }, { name: "93R", type: "PISTOL" }, { name: "G19", type: "PISTOL" }, { name: "QSZ-92G", type: "PISTOL" }] },
+            { ammo: ".45", image: getPlaceholderImage(".45"), guns: [{ name: "SMG-45", type: "SMG" }, { name: "Vector", type: "SMG" }] },
+            { ammo: "5.7x28", image: getPlaceholderImage("5.7x28"), guns: [{ name: "P90", type: "SMG" }] },
+            { ammo: "7.62x54R", image: getPlaceholderImage("7.62x54R"), guns: [{ name: "PKM", type: "LMG" }, { name: "SV-98", type: "SR" }, { name: "SVD", type: "MR" }] },
+            { ammo: ".338", image: getPlaceholderImage(".338"), guns: [{ name: "AWM", type: "SR" }] },
+            { ammo: "FTX", image: getPlaceholderImage("FTX"), guns: [{ name: "Marlin", type: "MR" }] },
+            { ammo: ".45 ACP", image: getPlaceholderImage(".45 ACP"), guns: [{ name: "M1911", type: "PISTOL" }] },
+            { ammo: ".50 AE", image: getPlaceholderImage(".50 AE"), guns: [{ name: "DE", type: "PISTOL" }] },
+            { ammo: ".357 Magnum", image: getPlaceholderImage(".357 Mag"), guns: [{ name: ".357 Revolver", type: "PISTOL" }] }
+        ];
+
+        let appData = [];
+        let currentFilter = 'all';
+
+        // English Type Config as requested
+        const typeConfig = {
+            'RIFE': { label: 'RIFLE', color: 'text-red-400', border: 'border-red-900/40' },
+            'SMG': { label: 'SMG', color: 'text-yellow-400', border: 'border-yellow-900/40' },
+            'LMG': { label: 'LMG', color: 'text-orange-500', border: 'border-orange-900/40' },
+            'SR': { label: 'SNIPER', color: 'text-purple-400', border: 'border-purple-900/40' },
+            'MR': { label: 'DMR', color: 'text-green-400', border: 'border-green-900/40' },
+            'PISTOL': { label: 'PISTOL', color: 'text-gray-400', border: 'border-gray-700/40' }
+        };
+
+        const filterButtons = [
+            { id: 'all', label: 'TẤT CẢ' },
+            { id: 'FAVORITE', label: 'YÊU THÍCH', icon: 'fa-star' },
+            { id: 'RIFE', label: 'RIFLE' },
+            { id: 'SMG', label: 'SMG' },
+            { id: 'LMG', label: 'LMG' },
+            { id: 'SR', label: 'SNIPER' },
+            { id: 'MR', label: 'DMR' },
+            { id: 'PISTOL', label: 'PISTOL' },
+        ];
+
+        // --- CORE FUNCTIONS ---
+        function initFilters() {
+            const container = document.getElementById('filterContainer');
+            container.innerHTML = `<div class="text-xs font-mono text-gray-500 mr-2 uppercase tracking-widest hidden md:block">DANH MỤC_</div>`;
+            
+            filterButtons.forEach(btn => {
+                const button = document.createElement('button');
+                const isActive = currentFilter === btn.id;
+                
+                button.className = `filter-btn relative px-4 py-1 text-xs font-bold uppercase tracking-wider rounded-sm transition-all duration-300 border ${isActive ? 'bg-df-accent text-black border-df-accent shadow-md' : 'bg-[#1a1a1a] border-gray-700 text-gray-400 hover:border-gray-400 hover:text-white'}`;
+                button.innerHTML = btn.icon ? `<i class="fa-solid ${btn.icon} mr-1"></i>${btn.label}` : btn.label;
+                button.onclick = () => {
+                    currentFilter = btn.id;
+                    initFilters(); // Re-render buttons
+                    render();
+                };
+                container.appendChild(button);
+            });
+        }
+
+        function loadData() {
+            const stored = localStorage.getItem('df_weaponData');
+            if (stored) {
+                appData = JSON.parse(stored);
+                // Migration: Ensure clean data structure
+                appData.forEach(group => {
+                    // Remove tier if exists in old data (implicitly handled by just not using it)
+                    if (!group.image) group.image = getPlaceholderImage(group.ammo);
+                    
+                    if (!group.guns) group.guns = [];
+                    
+                    group.guns.forEach(gun => {
+                        if (!gun.builds) gun.builds = [];
+                        if (typeof gun.isFavorite === 'undefined') gun.isFavorite = false;
+                    });
+                });
+            } else {
+                appData = JSON.parse(JSON.stringify(defaultData));
+            }
+            updateDatalist();
+        }
+
+        function saveData() {
+            localStorage.setItem('df_weaponData', JSON.stringify(appData));
+            updateDatalist();
+            render(currentFilter, document.getElementById('searchInput').value);
+            if (currentBuildGun) renderBuildList();
+        }
+
+        function resetData() {
+            if(confirm("CẢNH BÁO: Thao tác này sẽ xóa toàn bộ dữ liệu tùy chỉnh. Tiếp tục?")) {
+                localStorage.removeItem('df_weaponData');
+                loadData();
+                render();
+            }
+        }
+
+        // --- IMPORT / EXPORT FUNCTIONS ---
+        function exportData() {
+            const dataStr = JSON.stringify(appData, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const date = new Date().toISOString().slice(0, 10);
+            a.download = `delta_force_backup_${date}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function triggerImport() {
+            document.getElementById('importFile').click();
+        }
+
+        function handleImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if(!confirm("CẢNH BÁO: Dữ liệu hiện tại sẽ bị ghi đè bởi file mới. Bạn có chắc chắn không?")) {
+                event.target.value = ''; // Reset input
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    // Basic validation
+                    if (Array.isArray(importedData) && importedData.length > 0 && importedData[0].ammo) {
+                        appData = importedData;
+                        // Run migration logic just in case file is old
+                        appData.forEach(group => {
+                            if (!group.image) group.image = getPlaceholderImage(group.ammo);
+                            if (!group.guns) group.guns = [];
+                            group.guns.forEach(gun => {
+                                if (!gun.builds) gun.builds = [];
+                                if (typeof gun.isFavorite === 'undefined') gun.isFavorite = false;
+                            });
+                        });
+
+                        saveData();
+                        alert("NHẬP DỮ LIỆU THÀNH CÔNG!");
+                    } else {
+                        alert("LỖI: Định dạng file không hợp lệ.");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert("LỖI: Không thể đọc file. Vui lòng kiểm tra lại.");
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset input for next use
+        }
+
+        function updateDatalist() {
+            const datalist = document.getElementById('ammoList');
+            datalist.innerHTML = '';
+            appData.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group.ammo;
+                datalist.appendChild(option);
+            });
+        }
+
+        // --- RENDER ---
+        function render(filterType = currentFilter, searchQuery = '') {
+            const grid = document.getElementById('gridContainer');
+            const noRes = document.getElementById('noResults');
+            grid.innerHTML = '';
+            
+            let hasResults = false;
+            const query = (searchQuery || document.getElementById('searchInput').value).toLowerCase().trim();
+
+            appData.forEach((group, groupIndex) => {
+                const guns = group.guns || [];
+                
+                // Filter Guns within Group
+                const visibleGuns = guns.filter((gun, gunIndex) => {
+                    let typeMatch = (filterType === 'all') || 
+                                    (filterType === 'FAVORITE' && gun.isFavorite) || 
+                                    (gun.type === filterType);
+                    
+                    const nameMatch = gun.name.toLowerCase().includes(query);
+                    const ammoMatch = group.ammo.toLowerCase().includes(query);
+                    const buildMatch = (gun.builds || []).some(b => b.name.toLowerCase().includes(query));
+
+                    gun._idx = gunIndex; // Store index for binding
+                    return typeMatch && (query === '' || nameMatch || ammoMatch || buildMatch);
+                });
+
+                if (visibleGuns.length > 0) {
+                    hasResults = true;
+                    
+                    const card = document.createElement('div');
+                    card.className = `warehouse-panel p-0 relative group transition-all duration-300 flex flex-col h-full`;
+                    
+                    // Card Header
+                    const headerHtml = `
+                        <div class="flex gap-4 p-4 border-b border-[#333] bg-[#1a1a1a]">
+                            <div class="relative w-12 h-12 bg-black border border-gray-700 flex-shrink-0">
+                                <img src="${group.image}" class="w-full h-full object-cover opacity-60 grayscale hover:grayscale-0 transition-all">
+                            </div>
+                            <div class="overflow-hidden flex-grow flex flex-col justify-center">
+                                <h2 class="text-xl font-bold text-df-accent tracking-wider truncate font-mono" title="${group.ammo}">${group.ammo}</h2>
+                                <span class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">LOẠI ĐẠN CHUẨN</span>
+                            </div>
+                        </div>
+                    `;
+
+                    // Guns List
+                    let listHtml = `<div class="p-2 space-y-1 flex-grow bg-[#0f0f0f]">`;
+                    visibleGuns.forEach(gun => {
+                        const style = typeConfig[gun.type] || { label: 'KHÁC', color: 'text-gray-500', border: 'border-gray-600' };
+                        const isFav = gun.isFavorite;
+                        const buildCount = (gun.builds || []).length;
+
+                        listHtml += `
+                            <div class="item-row flex items-center justify-between border-l-[3px] ${isFav ? 'border-l-df-accent bg-[#1a1a1a]' : 'border-l-transparent'} p-2 pr-3 transition-colors group/item">
+                                <div class="flex items-center gap-3 overflow-hidden">
+                                    <button onclick="toggleFavorite('${group.ammo}', ${gun._idx})" class="text-xs ${isFav ? 'text-df-accent' : 'text-gray-700 hover:text-gray-400'}">
+                                        <i class="${isFav ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+                                    </button>
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-gray-200 tracking-wide text-sm truncate w-24 sm:w-auto">${gun.name}</span>
+                                        <span class="text-[9px] font-mono ${style.color}">${style.label}</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center gap-2 opacity-40 group-hover/item:opacity-100 transition-opacity">
+                                    <button onclick="openBuildModal('${group.ammo}', ${gun._idx})" class="relative p-1 hover:text-df-accent transition-colors" title="Cấu hình">
+                                        <i class="fa-solid fa-screwdriver-wrench"></i>
+                                        ${buildCount > 0 ? `<span class="absolute -top-1 -right-1 w-2 h-2 bg-df-accent rounded-full"></span>` : ''}
+                                    </button>
+                                    <div class="w-px h-3 bg-gray-700"></div>
+                                    <button onclick="editWeapon('${group.ammo}', ${gun._idx})" class="p-1 hover:text-white transition-colors"><i class="fa-solid fa-pen"></i></button>
+                                    <button onclick="deleteWeapon('${group.ammo}', ${gun._idx})" class="p-1 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash"></i></button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    listHtml += `</div>`;
+
+                    // Quick Add
+                    const footerHtml = `
+                        <div class="p-2 bg-[#121212] border-t border-[#333]">
+                            <button onclick="openModal('${group.ammo}')" class="w-full py-1 text-[10px] font-mono text-gray-600 hover:text-df-accent border border-dashed border-gray-800 hover:border-df-accent transition-colors uppercase rounded-sm">
+                                + Thêm súng mới
+                            </button>
+                        </div>
+                    `;
+
+                    card.innerHTML = headerHtml + listHtml + footerHtml;
+                    grid.appendChild(card);
+                }
+            });
+
+            noRes.classList.toggle('hidden', hasResults);
+        }
+
+        // --- CRUD LOGIC ---
+        const modal = document.getElementById('modal');
+        const modalContent = document.getElementById('modalContent');
+        let isEditing = false, editTarget = {};
+
+        function toggleFavorite(ammo, index) {
+            const group = appData.find(g => g.ammo === ammo);
+            if(group) {
+                group.guns[index].isFavorite = !group.guns[index].isFavorite;
+                saveData();
+            }
+        }
+
+        function openModal(prefillAmmo = null) {
+            isEditing = false;
+            document.getElementById('modalTitle').innerText = "NHẬP DỮ LIỆU";
+            document.getElementById('inputName').value = "";
+            document.getElementById('inputAmmo').value = prefillAmmo || "";
+            document.getElementById('inputType').value = "RIFE";
+            
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-95');
+            modalContent.classList.add('scale-100');
+        }
+
+        function editWeapon(ammo, index) {
+            const group = appData.find(g => g.ammo === ammo);
+            const gun = group.guns[index];
+            isEditing = true;
+            editTarget = { ammo, index };
+
+            document.getElementById('modalTitle').innerText = "CHỈNH SỬA THÔNG TIN";
+            document.getElementById('inputName').value = gun.name;
+            document.getElementById('inputAmmo').value = ammo;
+            document.getElementById('inputType').value = gun.type;
+
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-95');
+            modalContent.classList.add('scale-100');
+        }
+
+        function closeModal() {
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+        }
+
+        function saveWeapon() {
+            const name = document.getElementById('inputName').value.trim().toUpperCase();
+            const ammo = document.getElementById('inputAmmo').value.trim().toUpperCase();
+            const type = document.getElementById('inputType').value;
+
+            if (!name || !ammo) return alert("THIẾU THÔNG TIN: Vui lòng nhập Tên và Loại đạn");
+
+            let existingBuilds = [], existingFav = false;
+
+            // Remove old if editing
+            if (isEditing) {
+                const oldGIdx = appData.findIndex(g => g.ammo === editTarget.ammo);
+                if (oldGIdx > -1) {
+                    const gun = appData[oldGIdx].guns[editTarget.index];
+                    existingBuilds = gun.builds;
+                    existingFav = gun.isFavorite;
+                    appData[oldGIdx].guns.splice(editTarget.index, 1);
+                    if(appData[oldGIdx].guns.length === 0) appData.splice(oldGIdx, 1);
+                }
+            }
+
+            // Add/Update
+            let group = appData.find(g => g.ammo === ammo);
+            if (!group) {
+                group = { ammo, image: getPlaceholderImage(ammo), guns: [] };
+                appData.push(group);
+            }
+
+            group.guns.push({ name, type, builds: existingBuilds, isFavorite: existingFav });
+            saveData();
+            closeModal();
+        }
+
+        function deleteWeapon(ammo, index) {
+            if(!confirm("XÁC NHẬN XÓA? Hành động này không thể hoàn tác.")) return;
+            const gIdx = appData.findIndex(g => g.ammo === ammo);
+            appData[gIdx].guns.splice(index, 1);
+            if(appData[gIdx].guns.length === 0) appData.splice(gIdx, 1);
+            saveData();
+        }
+
+        // --- BUILD MANAGER ---
+        const buildModal = document.getElementById('buildModal');
+        let currentBuildGun = null;
+
+        function openBuildModal(ammo, idx) {
+            const group = appData.find(g => g.ammo === ammo);
+            currentBuildGun = group.guns[idx];
+            document.getElementById('buildGunName').innerText = `CẤU HÌNH: ${currentBuildGun.name} // ${group.ammo}`;
+            renderBuildList();
+            buildModal.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        function closeBuildModal() {
+            buildModal.classList.add('opacity-0', 'pointer-events-none');
+            currentBuildGun = null;
+        }
+
+        function renderBuildList() {
+            const container = document.getElementById('buildListContainer');
+            const msg = document.getElementById('noBuildsMsg');
+            container.innerHTML = '';
+            
+            // Fix: Fallback to empty array if builds is undefined
+            const builds = currentBuildGun.builds || [];
+
+            if (!builds.length) {
+                msg.classList.remove('hidden');
+                return;
+            }
+            msg.classList.add('hidden');
+
+            builds.forEach((build, i) => {
+                const div = document.createElement('div');
+                div.className = 'bg-[#121212] border border-gray-700 p-3 hover:border-df-accent transition-colors';
+                div.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="text-white font-bold text-sm block">${build.name}</span>
+                            <span class="text-df-accent font-mono text-xs">${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(build.price)}</span>
+                        </div>
+                        <button onclick="deleteBuild(${i})" class="text-gray-600 hover:text-red-500"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    <div class="flex bg-black p-2 border border-gray-800">
+                        <code class="text-[10px] text-gray-300 font-mono flex-grow break-all">${build.code}</code>
+                        <button onclick="copyCode('${build.code}')" class="text-df-accent hover:text-white ml-2 text-xs uppercase font-bold whitespace-nowrap">COPY MÃ</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addBuild() {
+            const name = document.getElementById('buildName').value;
+            const price = document.getElementById('buildPrice').value;
+            const code = document.getElementById('buildCode').value;
+            
+            if(!name || !code) return alert("Vui lòng nhập Tên và Mã code");
+            
+            // Fix: Initialize builds if missing
+            if (!currentBuildGun.builds) currentBuildGun.builds = [];
+            
+            currentBuildGun.builds.push({ name, price: Number(price), code });
+            saveData();
+            document.getElementById('buildName').value = '';
+            document.getElementById('buildPrice').value = '';
+            document.getElementById('buildCode').value = '';
+        }
+
+        function deleteBuild(i) {
+            if(confirm("Xóa bản vẽ cấu hình này?")) {
+                currentBuildGun.builds.splice(i, 1);
+                saveData();
+            }
+        }
+
+        function copyCode(txt) {
+            const el = document.createElement('textarea');
+            el.value = txt;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            alert("ĐÃ SAO CHÉP MÃ VÀO BỘ NHỚ TẠM");
+        }
+
+        // Listeners
+        document.getElementById('searchInput').addEventListener('input', (e) => render(currentFilter, e.target.value));
+        window.onclick = (e) => {
+            if(e.target.classList.contains('modal-overlay')) { closeModal(); closeBuildModal(); }
+        }
+
+        // Init
+        initFilters();
+        loadData();
+        render();
+
+    </script>
+</body>
+</html>
